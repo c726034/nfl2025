@@ -1,0 +1,60 @@
+def get_scores(day1=None, day2=None):
+    """Retrieve scores, format scores, write to contest spreadsheet.
+        Arguments:(day1, day2). Defaults: day1=current day, day2=previous day. Both accept 'YYYY-MM-DD' string values.
+    """
+
+    day1=None
+    day2=None
+
+    if day1 is None:
+        day1 = str((dt.datetime.today()).strftime('%Y-%m-%d')) #set day1 to today
+    if day2 is None:
+        day2 = str((dt.datetime.today()-dt.timedelta(days=1)).strftime('%Y-%m-%d')) #set day2 to yesterday
+        print(f"Day 1: {day1}, Day 2: {day2}")
+    gamedates = f"{day1},{day2}"
+    url = "https://sportspage-feeds.p.rapidapi.com/games"
+    querystring = {"league":"NFL", "date":gamedates}
+    headers = {
+        "X-RapidAPI-Key": "6205283aa4msh8f78a13b7f21888p1888c8jsn66fd82188693",
+        "X-RapidAPI-Host": "sportspage-feeds.p.rapidapi.com"
+    }
+    response = requests.get(url, headers=headers, params=querystring)
+
+    # FORMAT RETRIEVED SCORES
+    rawscore = response.json()
+    games=[]
+    for game in rawscore['results']:
+        if game['status'] == 'final':
+            games.append(game)
+
+    scores=[]
+    for g in range(len(games)):
+        date = games[g]['schedule']['date']
+        datefmt = dt.datetime.strptime(date,"%Y-%m-%dT%H:%M:%S.%fZ")
+        away = games[g]['teams']['away']['mascot']
+        home = games[g]['teams']['home']['mascot']
+        awaypts = games[g]['scoreboard']['score']['away']
+        homepts = games[g]['scoreboard']['score']['home']
+        scores.append([date, away, awaypts, home, homepts])
+    scoresdf = pd.DataFrame(scores, columns=['date','away','awaypts','home','homepts'])
+    scoresdf.date = pd.to_datetime(scoresdf.date)
+
+    # calculate schedule week by taking week of year, adding 52 for january games, then subtracting the 35wks before season
+    scoresdf['nflweek'] = (scoresdf.date-dt.timedelta(days=3)).dt.isocalendar().week + ((scoresdf.date.dt.year-2025)*52) - 35
+    scoresdf['awaykey'] = scoresdf.away + scoresdf.nflweek.astype(str)
+    scoresdf['homekey'] = scoresdf.home + scoresdf.nflweek.astype(str)
+    writescoresdf = scoresdf[['nflweek','awaykey','homekey','awaypts','homepts']]
+
+    # OPEN CONTEST SPREADSHEET AND READ IN EXISTING SCORES
+    gc = gspread.service_account(filename="service_account.json")
+    contestbeta = gc.open("NFL_Pool_2025")
+    scoreinput = contestbeta.worksheet("scoreinput")
+
+    # ADD NEW SCORES TO DATAFRAME AND DEDUPLICATE
+    allscores = pd.DataFrame(scoreinput.get_all_records())
+    allscores = pd.concat([allscores, writescoresdf], axis = 0)
+    allscores = allscores.drop_duplicates(keep = 'last', ignore_index = True).sort_values(by = 'nflweek')
+
+    # UPDATE CONTEST SPREADSHEET
+    scoreinput.update([allscores.columns.values.tolist()] + allscores.values.tolist())
+    return (writescoresdf)
