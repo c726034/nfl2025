@@ -156,7 +156,7 @@ def get_lines(write = 'N', send = 'N', recip = emails, nflweek=None):
 
     # DEFINE FUNCTION TO ADD LINES TO CONTEST SPREADSHEET
     def add_lines():
-        gc = gspread.service_account(filename="service_account.json")
+        gc = gspread.service_account(filename="C:/Users/austi/Documents/sec/service_account.json")
         contestbeta = gc.open("NFL_Pool_2025")
         lineinput = contestbeta.worksheet("lineinput")
         linesgs = pd.DataFrame(lineinput.get_all_records())
@@ -193,7 +193,7 @@ def get_picks(picksday='X', w = None):
     sides = pd.read_csv('./csv/sides.csv')
     names = pd.read_csv('./csv/names.csv')
 
-    gc = gspread.service_account(filename="service_account.json")
+    gc = gspread.service_account(filename="C:/Users/austi/Documents/sec/service_account.json")
     contest = gc.open("NFL_Pool_2025")
     picksheet = gc.open("NFL 2025 (Responses)")
     gspicks = picksheet.worksheet("Form Responses 1")
@@ -355,7 +355,7 @@ def get_scores(day1=None, day2=None):
     writescoresdf = scoresdf[['nflweek','awaykey','homekey','awaypts','homepts']]
 
     # OPEN CONTEST SPREADSHEET AND READ IN EXISTING SCORES
-    gc = gspread.service_account(filename="service_account.json")
+    gc = gspread.service_account(filename="C:/Users/austi/Documents/sec/service_account.json")
     contestbeta = gc.open("NFL_Pool_2025")
     scoreinput = contestbeta.worksheet("scoreinput")
 
