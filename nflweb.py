@@ -1,5 +1,5 @@
 import streamlit as st
-import nflmod
+import nflmod_web as nflmod
 
 st.set_page_config(page_title="NFL Degen Contest Tools", layout="wide")
 st.title("NFL Degen Contest Tools")
