@@ -15,6 +15,11 @@ try:
 except Exception:
     st = None
 
+# Secrets (Streamlit Cloud) with env fallbacks for local dev
+RAPID_ODDS_KEY = (st.secrets.get("rapidapi_odds_key") if st else None) or os.getenv("RAPIDAPI_ODDS_KEY")
+GMAIL_USER = (st.secrets.get("gmail_user") if st else None) or os.getenv("GMAIL_USER")
+GMAIL_APP_PASSWORD = (st.secrets.get("gmail_app_password") if st else None) or os.getenv("GMAIL_APP_PASSWORD")
+
 def _get_gc():
     import gspread, os
     if st and "gcp_service_account" in st.secrets:
@@ -47,7 +52,7 @@ def get_lines(write = 'N', send = 'N', recip = emails, nflweek=None):
     querystring = {"regions":"us","oddsFormat":"american","markets":"spreads","dateFormat":"iso"}
     headers = {
         'x-rapidapi-host': "odds.p.rapidapi.com",
-        'x-rapidapi-key': "6205283aa4msh8f78a13b7f21888p1888c8jsn66fd82188693"
+        'x-rapidapi-key': RAPID_ODDS_KEY
         }
     response = requests.request("GET", url, headers=headers, params=querystring)
     nfl_lines = response.json()
@@ -145,8 +150,8 @@ def get_lines(write = 'N', send = 'N', recip = emails, nflweek=None):
         # Email sending process
         context = ssl.create_default_context()
         with smtplib.SMTP("smtp.gmail.com", port=587) as smtp:
-            smtp.starttls(context=context)
-            smtp.login("degens2019@gmail.com", "lerr oamv egga ofwp")
+            smtp.starttls(context=ssl.create_default_context())
+            smtp.login(GMAIL_USER, GMAIL_APP_PASSWORD)
             smtp.send_message(msg)
 
         return linesend
