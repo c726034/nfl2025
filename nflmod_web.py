@@ -191,12 +191,15 @@ def get_lines(write = 'N', send = 'N', recip = emails, nflweek=None):
     return (linesdf)
 
 # FUNCTION TO READ IN PICKS FROM GOOGLE SHEETS, CHECK TIMESTAMPS AND RECORD ON THE SCORESHEET
-def get_picks(picksday='X', w = None):
-    ''' Retrieve picks from Form data, process picks, print late picks (if any), writes picks to contest spreasheet.
-        Arguments = (picksday=None, w=nflweek). 
-        'picksday' must be either 'T' (Thurs) or 'S' (all) to execute a spreadsheet write. Submit other character  or None to view only.
-        'w' will be set to current nflweek if no value is entered
-    '''
+def get_picks(picksday='X', w=None, send='N', recip=emails):
+    """
+    Retrieve picks, process, optionally write to contest sheet, and (optionally) email players that picks are posted.
+    Args:
+        picksday: 'T' (Thu only), 'S' (all, incl. Thu), anything else = view-only/no write
+        w: NFL week (None -> auto-current)
+        send: 'Y' to email players after a write; 'N' (default) to skip emailing
+        recip: list of recipient emails or single email string
+    """
     try:
         w = int(w)
     except ValueError:
@@ -313,18 +316,60 @@ def get_picks(picksday='X', w = None):
     # SPECIFY WORKSHEET WRITE SPACE
     pickinput = contest.worksheet("pickinput")
     startcell = 'B' + str(((w-1)*5)+2)
-    endcell = 'X' + str(((w-1)*5)+6)
-    #############################################################################
-    # # THURSDAY
-    # # WRITE PICKS TO INPUT SHEET OF CONTEST WORKOOK
-    if picksday == 'T': pickinput.update(f'{startcell}:{endcell}', thpicksout.values.tolist())
-    #############################################################################
-    #############################################################################
-    # # SUNDAY (ALL PICKS FOR WEEK -- INCLUDES THURS)
-    # # WRITE PICKS TO INPUT SHEET OF CONTEST WORKOOK
-    if picksday == 'S': pickinput.update(f'{startcell}:{endcell}', picksout.values.tolist())
-    ############################################################################
-    print (picks[['timestamp','name','pick','date','kickoff','latepick']])
+    endcell   = 'X' + str(((w-1)*5)+6)
+
+    wrote = False  # track if we actually wrote to the sheet
+
+    # ---- WRITE SECTION (unchanged logic) ----
+    if picksday == 'T':
+        pickinput.update(f'{startcell}:{endcell}', thpicksout.values.tolist())
+        wrote = True
+
+    if picksday == 'S':
+        pickinput.update(f'{startcell}:{endcell}', picksout.values.tolist())
+        wrote = True
+
+    # ---- OPTIONAL EMAIL NOTIFY ----
+    def _email_picks_posted(recip_list):
+        if not recip_list:
+            return "No recipients provided; skipped email."
+        # Normalize recip to list
+        if isinstance(recip_list, str):
+            recip_list = [recip_list]
+
+        day_label = "Thursday" if picksday == 'T' else "All picks for the week"
+        subject = f"Week {w}: Picks Posted ({day_label})"
+        # Customize links as you like:
+        body_html = f"""
+        <html><body>
+            <p>Picks for <b>Week {w}</b> have been posted to the contest sheet ({day_label}).</p>
+            <p><a href="https://x.gd/Ch1Z6">View standings / sheet</a></p>
+        </body></html>
+        """
+
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = f"Degen Contest 2025 <{GMAIL_USER}>"
+        msg["To"] = ", ".join(recip_list)
+        msg.add_alternative(body_html, subtype="html")
+
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+            smtp.starttls(context=ctx)
+            smtp.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+            smtp.send_message(msg)
+        return f"Emailed {len(recip_list)} recipient(s)."
+
+    # Only email if we actually wrote AND user requested send='Y'
+    email_status = None
+    if wrote and (send == 'Y'):
+        email_status = _email_picks_posted(recip)
+
+    # Debug/return as before
+    print(picks[['timestamp','name','pick','date','kickoff','latepick']])
+    if email_status:
+        print(email_status)
+
     return picks[['timestamp','name','pick','date','kickoff','latepick']]
 
 # %%
@@ -342,7 +387,7 @@ def get_scores(day1=None, day2=None):
     url = "https://sportspage-feeds.p.rapidapi.com/games"
     querystring = {"league":"NFL", "date":gamedates}
     headers = {
-        "X-RapidAPI-Key": "6205283aa4msh8f78a13b7f21888p1888c8jsn66fd82188693",
+        "X-RapidAPI-Key": RAPID_ODDS_KEY,  # from st.secrets/env
         "X-RapidAPI-Host": "sportspage-feeds.p.rapidapi.com"
     }
     response = requests.get(url, headers=headers, params=querystring)
